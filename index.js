@@ -17,11 +17,12 @@ const pool = mysql.createPool({
   database: 'b4hzh92tecjx3sbrkoko'
 });
 
+
 // Middleware to verify token
 const verifyToken = (req, res, next) => {
   const token = req.headers['authorization'];
   if (!token) return res.status(401).send('Unauthorized access: Token missing');
-  jwt.verify(token.replace('Bearer ', ''), 'secret_key', (err, decoded) => {
+  jwt.verify(token.replace('Bearer ', ''), 'chriss', (err, decoded) => {
     if (err) {
       console.error(err);
       return res.status(403).send('Unauthorized access: Invalid or expired token');
@@ -31,94 +32,25 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// Get all data from a roles table
-app.get('/roles',verifyToken, async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM roles');
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error retrieving roles');
-  }
-});
 
-// Select Single role
-app.get('/roles/:id', verifyToken, async (req, res) => {
-  const id = req.params.id;
-  try {
-    const [rows] = await pool.query('SELECT * FROM roles WHERE id = ?', [id]);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error showing role');
-  }
-});
-
-// Insert data into users table
-app.post('/roles', verifyToken, async (req, res) => {
-  const { email, password } = req.body; // Destructure data from request body
-  if (!email || !password ) {
-    return res.status(400).send('Please provide all required fields (email, password)');
-  }
-  try {
-    // Encrypt the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await pool.query('INSERT INTO roles (email, password) VALUES (?, ?)', [email, hashedPassword]);
-    res.json({ message: ` inserted successfully ` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error inserting role');
-  }
-});
-
-// Update role
-app.put('/roles/:id', verifyToken, async (req, res) => {
-  const id = req.params.id;
-  const { email, password } = req.body; // Destructure new email and password from request body
-  if (!email || !password) {
-    return res.status(400).send('Please provide the new email and password');
-  }
-  try {
-    // Encrypt the new password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await pool.query('UPDATE roles SET email = ?, password = ? WHERE id = ?', [email, hashedPassword, id]);
-    res.json({ message: ` email and password updated successfully ` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error updating role email and password');
-  }
-});
-
-// Delete role by ID
-app.delete('/roles/:id', verifyToken, async (req, res) => {
-  const id = req.params.id;
-  try {
-    await pool.query('DELETE FROM roles WHERE id = ?', [id]);
-    res.json({ message: `Data with ID ${id} deleted successfully` });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Error deleting role');
-  }
-});
-
-// Login route
+// ************************************************************* Login Channel ********************************************
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { Username, Password } = req.body;
   try {
-    const [users] = await pool.query('SELECT * FROM roles WHERE email = ?', [email]);
+    const [users] = await pool.query('SELECT * FROM users WHERE Username = ?', [Username]);
     if (!users.length) {
       return res.status(404).send('User not found');
     }
 
     const user = users[0];
     // Compare the provided password with the hashed password in the database
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
+    const PasswordMatch = await bcrypt.compare(Password, user.Password);
+    if (!PasswordMatch) {
       return res.status(401).send('Invalid password');
     }
 
     // Generate JWT token
-    const token = jwt.sign({ id: user.id }, 'secret_key', { expiresIn: '1h' });
+    const token = jwt.sign({ id: user.id }, 'chriss', { expiresIn: '1h' });
 
     // Send the token as response
     res.json({ token });
@@ -128,46 +60,196 @@ app.post('/login', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
 
-// Partially update role email or password
-app.patch('/roles/:id', verifyToken, async (req, res) => {
-  const id = req.params.id;
-  const { email, password } = req.body; // Destructure new email and password from request body
+
+// **************************************************** Insert data into users table******************************
+app.post('/users',  async (req, res) => {
+  const { Username, Password } = req.body; // Destructure data from request body
+  if (!Username || !Password) {
+    return res.status(400).send('Please provide all required fields (Username,password)');
+  }
   try {
-    // Check if either email or password is provided
-    if (!email && !password) {
-      return res.status(400).send('Please provide at least one of the following: email or password');
-    }
-
-    // Construct the update query and parameters based on the provided fields
-    let updateQuery = 'UPDATE roles SET ';
-    let params = [];
-    if (email) {
-      updateQuery += 'email = ?, ';
-      params.push(email);
-    }
-    if (password) {
-      // Encrypt the new password
-      const hashedPassword = await bcrypt.hash(password, 10);
-      updateQuery += 'password = ?, ';
-      params.push(hashedPassword);
-    }
-    // Remove the trailing comma and add the WHERE clause
-    updateQuery = updateQuery.slice(0, -2) + ' WHERE id = ?';
-    params.push(id);
-
-    // Perform the update query
-    const [result] = await pool.query(updateQuery, params);
-    if (result.affectedRows === 0) {
-      return res.status(404).send(`Role with ID ${id} not found`);
-    }
-
-    res.json({ message: `Role updated successfully for ID: ${id}` });
+    const [result] = await pool.query('INSERT INTO users SET ?', { Username, Password });
+    res.json({ message: `User inserted successfully with ID: ${result.insertId}` });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Error updating role');
+    res.status(500).send('Error inserting user');
   }
 });
+
+// *************************************** Update role *********************************************
+app.put('/users/:id', async (req, res) => {
+  const id = req.params.id;
+  const { Username, Password } = req.body; // Destructure data from request body
+  if (!Username || !Password) {
+    return res.status(400).send('Please Fill in all fields ( Username, Password)');
+  }
+  try {
+    const [result] = await pool.query('UPDATE users SET Username = ?, Password = ? WHERE Id = ?', [Username, Password, id]);
+    res.json({ message: `User updated successfully with ID: ${req.params.id}` });  // Use ID from request params
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error updating User');
+  }
+});
+
+// ******************************************* Delete role by ID*************************************************************
+app.delete('/users/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    await pool.query('DELETE FROM users WHERE Id = ?', [id]);
+    res.json({ message: `User with ID ${id} deleted successfully` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('There has been an error deleting user');
+  }
+});
+
+
+//********************************** Get all data from a Users table*************************************************************
+app.get('/users', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM users');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('There has been an error showing users');
+  }
+});
+
+// Select Single role
+app.get('/users/:id',  async (req, res) => {
+  const id = req.params.id;
+  try {
+    const [rows] = await pool.query('SELECT * FROM users WHERE Id = ?', [id]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('There has been an error showing users');
+  }
+});
+
+
+
+// ************************ Getting Courses from the database *************************************************************
+app.get('/courses', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM courses');
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error showing courses');
+    }
+  });
+  
+  // Select Single Course
+  app.get('/courses/:id',  async (req, res) => {
+    const id = req.params.id;
+    try {
+      const [rows] = await pool.query('SELECT * FROM courses WHERE Id = ?', [id]);
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error showing Courses');
+    }
+  });
+
+  
+// ************************************** Getting Lecturers from the database**************************************************
+app.get('/lecturers', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM lecturers');
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error showing lecturers');
+    }
+  });
+  
+  // Select Single Lecturer
+  app.get('/lecturers/:id',  async (req, res) => {
+    const id = req.params.id;
+    try {
+      const [rows] = await pool.query('SELECT * FROM lecturers WHERE Id = ?', [id]);
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error showing Courses');
+    }
+  });
+
+
+  
+// **************************** Getting Students from the database *************************************************************
+
+app.get('/students', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM students');
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error retrieving students');
+    }
+  });
+  
+  // Select Single Student
+  app.get('/students/:id',  async (req, res) => {
+    const id = req.params.id;
+    try {
+      const [rows] = await pool.query('SELECT * FROM students WHERE Id = ?', [id]);
+      res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error showing Courses');
+    }
+  });
+// ********* Inserting the student data into database ********************
+
+app.post('/students',  async (req, res) => {
+    const { Name, Email, Phone } = req.body; // Destructure data from request body
+    if (!Name || !Email || !Phone) {
+      return res.status(400).send('Please provide all required fields (Name, Email , Phone)');
+    }
+    try {
+      const [result] = await pool.query('INSERT INTO students SET ?', { Name, Email, Phone });
+      res.json({ message: `Data inserted successfully with ID: ${result.insertId}` });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('Error inserting Data');
+    }
+  });
+
+  // ********* Updating the student data ********************
+  app.put('/students/:id',  async (req, res) => {
+    const id = req.params.id;
+    const { Name, Email, Phone } = req.body; // Destructure data from request body
+    if (!Name || !Email || !Phone) {
+      return res.status(400).send('Please Fill in all fields ( Name, Email, Phone)');
+    }
+    try {
+      const [result] = await pool.query('UPDATE students SET Name = ?, Email = ?, Phone= ? WHERE Id = ?', [Name, Email, Phone, id]);
+      res.json({ message: `User updated successfully with ID: ${req.params.id}` });  // Use ID from request params
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('Error updating Student');
+    }
+  });
+            //  ********************* Deleting Student from table ************** 
+
+  app.delete('/students/:id',  async (req, res) => {
+    const id = req.params.id;
+    try {
+      await pool.query('DELETE FROM students WHERE Id = ?', [id]);
+      res.json({ message: `Student with ID ${id} deleted successfully` });
+    } catch (err) {
+      console.error(err);
+      res.status(500).send('There has been an error deleting Student');
+    }
+  });
+  
+
+
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+  
